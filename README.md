@@ -461,4 +461,64 @@ SSL劫持攻击即SSL证书欺骗攻击，攻击者为了获得HTTPS传输的明
 2. SSL剥离攻击
 这种攻击方式也需要将攻击者设置为中间人，之后见HTTPS范文替换为HTTP返回给浏览器，而中间人和服务器之间仍然保持HTTPS连接。由于HTTP是明文传输的，所以中间人可以获取客户端和服务器传输数据
 
+## UIKit view 生命周期
+
+在运行时展示View
+UIKit极大的简化了加载和展示View的过程，它大概会按照以下顺序执行一些任务：
+- 通过storyboard文件中的信息实例化视图
+- 连接outlet和action
+- 把根视图赋值给UIViewController的view属性（其实就是调用loadView 方法）
+- 调用UIViewController的awakeFromNib方法。要注意，在调用方法前，的trait collecion为空且子视图的位置可能不正确
+- 调用UIViewController的viewDidLoad方法。
+
+此时已经完成了视图的加载工作，在展示到屏幕之前，还有以下几个步骤：
+- 调用UIViewController的viewWillAppear方法。
+- 更新视图的布局
+- 把视图展示到屏幕上
+- 调用UIViewController的viewDidAppear方法。
+
+### awakeFromNib方法
+
+至此，第一个问题已经几乎解释完了，还剩一个awakeFromNib方法。
+
+我们已经知道，awakeFromNib方法被调用时，所有视图的outlet和action已经连接，但还没有被确定。这个方法可以算作是和视图控制器的实例化配合在一起使用的，因为有些需要根据用户喜好来进行设置的内容，无法存在storyboard中，所以可以在awakeFromNib方法中被加载进来。
+
+awakeFromNib方法在视图控制器的生命周期内只会被调用一次。因为它和视图控制器从nib文件中的解档密切相关，和view的关系却不大。
+
+### loadView方法
+当执行到loadView方法时，视图控制器已经从nib文件中被解档并创建好了，接下来的任务主要是对view进行初始化。
+
+loadView方法在UIViewController对象的view属性被访问到且为空的时候调用。
+这是它与awakeFromNib方法的一个区别。假设我们在处理内存警告时释放view属性（其实并不应该这么做，这里举个例子）：self.view = nil。因此loadView方法在视图控制器的生命周期内可能会被多次调用。
+
+这个方法不应该被直接调用，而是由系统自动调用。它会加载或创建一个view并把它赋值给UIViewController的view属性。
+
+在创建view的过程中，首先会根据nibName去找对应的Nib文件然后加载。如果nibName为空，或找不到对应的Nib文件，则会创建一个空视图(这种情况一般是纯代码，也就是为什么说代码构建View的时候，要重写loadView 方法)。
+
+注意在重写loadView方法的时候，不要调用父类的方法。
+
+### viewDidLoad方法
+loadView方法执行完之后，就会执行viewDidLoad方法。此时整个视图层次(view hierarchy)已经被放到内存中。
+
+无论是从nib文件加载，还是通过纯代码编写界面，viewDidLoad方法都会执行。我们可以重写这个方法，对通过nib文件加载的view做一些其他的初始化工作。比如可以移除一些视图，修改约束，加载数据等。
+
+### viewWillAppear和viewDidAppear方法
+在视图加载完成，并即将显示在屏幕上时，会调用viewWillAppear方法，在这个方法里，可以改变当前屏幕方向或状态栏的风格等。
+
+当viewWillAppear方法执行完后，系统会执行viewDidAppear方法。在这个方法中，还可以对视图做一些关于展示效果方面的修改。
+
+### 视图的生命历程
+到目前为止，我们已经了解了每个方法的作用，接下来就把整个流程梳理一遍。
+
+1. `-[ViewController initWithCoder:]`或`-[ViewController initWithNibName:Bundle]:`首先从归档文件中加载UIViewController对象。即使是纯代码，也会把nil作为参数传给后者。
+2. `-[ViewController awakeFromNib]:`作为第一个方法的助手，方便处理一些额外的设置。
+3. `-[ViewController loadView]:`创建或加载一个view并把它赋值给UIViewController的view属性
+4. `-[ViewController viewDidLoad]:`此时整个视图层次(view hierarchy)已经被放到内存中，可以移除一些视图，修改约束，加载数据等
+5. `-[ViewController viewWillAppear:]:`视图加载完成，并即将显示在屏幕上,还没有设置动画，可以改变当前屏幕方向或状态栏的风格等。
+6. `-[ViewController viewWillLayoutSubviews]：`即将开始子视图位置布局
+7. `-[ViewController viewDidLayoutSubviews]：`用于通知视图的位置布局已经完成
+8. `-[ViewController viewDidAppear:]：`视图已经展示在屏幕上，可以对视图做一些关于展示效果方面的修改。
+9. `-[ViewController viewWillDisappear:]：`视图即将消失
+10. `-[ViewController viewDidDisappear:]：`视图已经消失
+如果考虑UIViewController可能在某个时刻释放整个view。那么再次加载视图时显然会从步骤3开始。因为此时的UIViewController对象依然存在。
 
